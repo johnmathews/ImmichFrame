@@ -18,6 +18,8 @@ request, and the fork shrinks as they land.
 | `fix/request-edited-previews` | Request edited previews from Immich | PR #736, issue #680 |
 | `pr-734` (Pixolantis) | Select account and albums via URL parameters | PR #734 |
 | `feat/album-switching` | Up/down arrow keys switch albums | not yet opened; stacked on #734 |
+| `feat/admin-album-picker` | Choose albums by name in `/admin` | not yet opened |
+| `fix/focus-on-start` | Ask for keyboard focus on start, so a TV remote's keys work without a click | not yet opened |
 
 ## Updating
 
