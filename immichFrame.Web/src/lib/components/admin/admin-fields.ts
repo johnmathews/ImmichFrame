@@ -8,7 +8,8 @@ export type FieldType =
 	| 'select'
 	| 'list'
 	| 'date'
-	| 'guid-list';
+	| 'guid-list'
+	| 'album-list';
 
 export interface FieldDef<T = GeneralSettings> {
 	key: keyof T & string;
@@ -195,8 +196,8 @@ export const accountFields: FieldDef<ServerAccountSettings>[] = [
 	{ key: 'rating', label: 'Minimum rating', type: 'number', min: 1, max: 5 },
 	{ key: 'imagesFromDate', label: 'Images from date', type: 'date' },
 	{ key: 'imagesUntilDate', label: 'Images until date', type: 'date' },
-	{ key: 'albums', label: 'Albums', type: 'guid-list', help: 'One ID per line.' },
-	{ key: 'excludedAlbums', label: 'Excluded albums', type: 'guid-list', help: 'One ID per line.' },
+	{ key: 'albums', label: 'Albums', type: 'album-list' },
+	{ key: 'excludedAlbums', label: 'Excluded albums', type: 'album-list' },
 	{ key: 'people', label: 'People', type: 'guid-list', help: 'One ID per line.' },
 	{ key: 'tags', label: 'Tags', type: 'list', help: 'One tag per line.' }
 ];

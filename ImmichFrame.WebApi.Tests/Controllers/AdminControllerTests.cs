@@ -1,11 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using ImmichFrame.Core.Api;
 using ImmichFrame.WebApi.Tests.Mocks;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Moq;
+using Moq.Protected;
 using NUnit.Framework;
 
 namespace ImmichFrame.WebApi.Tests.Controllers
@@ -22,6 +25,7 @@ namespace ImmichFrame.WebApi.Tests.Controllers
 
         private string _configDir;
         private WebApplicationFactory<Program> _factory;
+        private Mock<HttpMessageHandler> _immichHandler;
 
         [SetUp]
         public void Setup()
@@ -31,11 +35,11 @@ namespace ImmichFrame.WebApi.Tests.Controllers
             Environment.SetEnvironmentVariable("IMMICHFRAME_CONFIG_PATH", _configDir);
             Environment.SetEnvironmentVariable("IMMICHFRAME_ADMIN_PASSWORD", AdminPassword);
 
-            var versionHandler = new Mock<HttpMessageHandler>().WithServerVersion();
+            _immichHandler = new Mock<HttpMessageHandler>().WithServerVersion();
             _factory = new WebApplicationFactory<Program>()
                 .WithWebHostBuilder(builder =>
                 {
-                    builder.ConfigureTestServices(services => services.UseMockHandler(versionHandler));
+                    builder.ConfigureTestServices(services => services.UseMockHandler(_immichHandler));
                 });
         }
 
@@ -256,5 +260,71 @@ namespace ImmichFrame.WebApi.Tests.Controllers
             var json = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
             Assert.That((bool)json["success"]!, Is.True);
         }
-    }
+    
+        private void ImmichAlbumsRespond(HttpStatusCode status, string json)
+        {
+            _immichHandler.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.Is<HttpRequestMessage>(req => req.RequestUri!.AbsolutePath.EndsWith("/albums")),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(() => new HttpResponseMessage { StatusCode = status, Content = new StringContent(json) });
+        }
+
+        [Test]
+        public async Task GetAccountAlbums_ReturnsAlbumsSortedByName()
+        {
+            var garden = Guid.NewGuid();
+            var holidays = Guid.NewGuid();
+            ImmichAlbumsRespond(HttpStatusCode.OK, JsonSerializer.Serialize(new[]
+            {
+                new AlbumResponseDto { Id = holidays, AlbumName = "holidays", AssetCount = 12, Description = "", ContributorCounts = [] },
+                new AlbumResponseDto { Id = garden, AlbumName = "Garden", AssetCount = 3, Description = "", ContributorCounts = [] }
+            }));
+            var client = CreateAdminClient();
+
+            var body = JsonNode.Parse("""
+                { "ImmichServerUrl": "http://mock-immich-server.com", "ApiKey": "key123" }
+                """);
+            var response = await client.PostAsJsonAsync("/api/Admin/Settings/Albums", body);
+
+            response.EnsureSuccessStatusCode();
+            var albums = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
+            Assert.Multiple(() =>
+            {
+                Assert.That(albums.Select(a => (string)a!["albumName"]!), Is.EqualTo(new[] { "Garden", "holidays" }));
+                Assert.That((Guid)albums[0]!["id"]!, Is.EqualTo(garden));
+                Assert.That((long)albums[1]!["assetCount"]!, Is.EqualTo(12));
+            });
+        }
+
+        [Test]
+        public async Task GetAccountAlbums_ImmichError_Returns400WithMessage()
+        {
+            ImmichAlbumsRespond(HttpStatusCode.Forbidden, "{}");
+            var client = CreateAdminClient();
+
+            var body = JsonNode.Parse("""
+                { "ImmichServerUrl": "http://mock-immich-server.com", "ApiKey": "key123" }
+                """);
+            var response = await client.PostAsJsonAsync("/api/Admin/Settings/Albums", body);
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+            var json = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+            Assert.That((string)json["detail"]!, Does.StartWith("Could not list albums from http://mock-immich-server.com"));
+        }
+
+        [Test]
+        public async Task GetAccountAlbums_RequiresAdminLogin()
+        {
+            var client = CreateAdminClient(password: null);
+
+            var body = JsonNode.Parse("""
+                { "ImmichServerUrl": "http://mock-immich-server.com", "ApiKey": "key123" }
+                """);
+            var response = await client.PostAsJsonAsync("/api/Admin/Settings/Albums", body);
+
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Unauthorized));
+        }
+}
 }
