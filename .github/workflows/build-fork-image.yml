@@ -1,0 +1,62 @@
+# Fork only, never sent upstream: builds the `deploy` branch (upstream main plus this fork's
+# patches) for the one amd64 host that runs it, and pushes it to ghcr.io/johnmathews/immichframe.
+name: Build fork image
+
+on:
+  push:
+    branches:
+      - deploy
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: johnmathews/immichframe
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build-fork-image
+  cancel-in-progress: true
+
+jobs:
+  publish_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=deploy
+            type=sha,prefix=sha-
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: final
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # AssemblyVersion needs four numbers; the run number tells builds apart.
+          build-args: |
+            VERSION=1.0.39.${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
