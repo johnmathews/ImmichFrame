@@ -128,6 +128,32 @@
 		<Textarea rows={4} value={idText} oninput={(e) => updateIdText(e.currentTarget.value)} />
 	{:else}
 		<div class="flex flex-col gap-2">
+			<Input
+				placeholder={albums ? 'Add an album: type part of its name' : 'Album names not loaded'}
+				disabled={!albums}
+				value={query}
+				oninput={(e) => (query = e.currentTarget.value)}
+			/>
+			{#if matches.length}
+				<ul class="flex flex-col overflow-hidden rounded-lg border border-light-300">
+					{#each matches as album (album.id)}
+						<li>
+							<button
+								type="button"
+								class="w-full px-3 py-1 text-start hover:bg-subtle"
+								onclick={() => add(album.id!)}
+							>
+								{album.albumName}
+								<Text inline color="muted" size="small">({album.assetCount})</Text>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{:else if query.trim() && albums}
+				<Text color="muted" size="small">No other album matches "{query.trim()}".</Text>
+			{/if}
+
+			<!-- After the Input: @immich/ui draws the field label inside Input. -->
 			{#if ids.length}
 				<ol class="flex flex-col gap-1">
 					{#each ids as id, index (id + index)}
@@ -155,31 +181,6 @@
 						</li>
 					{/each}
 				</ol>
-			{/if}
-
-			<Input
-				placeholder={albums ? 'Add an album: type part of its name' : 'Album names not loaded'}
-				disabled={!albums}
-				value={query}
-				oninput={(e) => (query = e.currentTarget.value)}
-			/>
-			{#if matches.length}
-				<ul class="flex flex-col overflow-hidden rounded-lg border border-light-300">
-					{#each matches as album (album.id)}
-						<li>
-							<button
-								type="button"
-								class="w-full px-3 py-1 text-start hover:bg-subtle"
-								onclick={() => add(album.id!)}
-							>
-								{album.albumName}
-								<Text inline color="muted" size="small">({album.assetCount})</Text>
-							</button>
-						</li>
-					{/each}
-				</ul>
-			{:else if query.trim() && albums}
-				<Text color="muted" size="small">No other album matches "{query.trim()}".</Text>
 			{/if}
 		</div>
 	{/if}
