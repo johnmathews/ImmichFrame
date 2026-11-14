@@ -225,6 +225,12 @@ Together with `account`, `albums` replaces the albums of that account with a com
 
 Unlike `?client=`, these parameters are not persisted. Note that anyone who can open your ImmichFrame can use `albums` to show any album the account's API key has access to.
 
+### Switching Albums with the Arrow Keys
+
+When a named account has two or more `Albums`, the up and down arrow keys switch between them in the browser, for example with a TV remote. The stops are "All albums" (what the frame shows by default) and then each album on its own. Down moves forward and up moves back. The album name shows for a few seconds, and the next photo comes from the new album.
+
+The frame remembers the last album per client (`?client=`) in the browser, so it reopens on that album. With `?account=`, only that account's albums take part. With `?albums=`, the arrow keys do nothing, because the URL already picks the albums.
+
 ### API Key Permissions
 
 Create the key with only the permissions below. ImmichFrame never needs administrative

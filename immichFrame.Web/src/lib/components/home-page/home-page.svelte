@@ -4,7 +4,17 @@
 	import { slideshowStore } from '$lib/stores/slideshow.store';
 	import { clientIdentifierStore, authSecretStore } from '$lib/stores/persist.store';
 	import { assetSelectionStore } from '$lib/stores/asset-selection.store';
+	import {
+		ALL_ALBUMS_KEY,
+		buildAlbumStops,
+		loadSavedAlbumStop,
+		saveAlbumStop,
+		stepAlbumIndex,
+		type AlbumStop
+	} from '$lib/album-cycle';
+	import AlbumLabel from '../elements/album-label.svelte';
 	import { onDestroy, onMount, setContext, tick } from 'svelte';
+	import { get } from 'svelte/store';
 	import OverlayControls from '../elements/overlay-controls.svelte';
 	import AssetComponent from '../elements/asset-component.svelte';
 	import type AssetComponentInstance from '../elements/asset-component.svelte';
@@ -33,6 +43,8 @@
 	const VIDEO_STALL_MS = 15000;
 	const CURSOR_HIDE_MS = 2000;
 	const RELOAD_ON_ERROR_MS = 30000;
+	const ALBUM_LABEL_MS = 3000;
+	const ALBUM_SWITCH_DELAY_MS = 700;
 
 	let assetHistory: api.AssetResponseDto[] = $state([]);
 	let assetBacklog: api.AssetResponseDto[] = $state([]);
@@ -75,6 +87,15 @@
 	let refreshInterval: number;
 
 	let cursorVisible = $state(true);
+
+	// The selection from the page URL; the album cycle starts from it and returns to it.
+	const baseSelection = get(assetSelectionStore);
+	let albumStops: AlbumStop[] = [];
+	let albumIndex = 0;
+	let shownAlbumKey = ALL_ALBUMS_KEY;
+	let albumLabel: string = $state('');
+	let albumLabelTimeout: number | undefined;
+	let albumSwitchTimeout: number | undefined;
 
 	const authsecret = page.url.searchParams.get('authsecret');
 
@@ -132,12 +153,18 @@
 		});
 	}
 
-	async function loadAssets() {
+	async function loadAssets(): Promise<void> {
 		try {
+			const selection = $assetSelectionStore;
 			let assetRequest = await api.getAssets({
 				clientIdentifier: $clientIdentifierStore,
-				...$assetSelectionStore
+				...selection
 			});
+
+			// The album changed while this request was in flight: its assets belong to the old one.
+			if (selection !== $assetSelectionStore) {
+				return loadAssets();
+			}
 
 			if (assetRequest.status != 200) {
 				// 401 is not part of the generated response types, but the auth handler sends it.
@@ -224,6 +251,17 @@
 
 	async function getNextAssets() {
 		if (!assetBacklog.length) {
+			await loadAssets();
+		}
+
+		// The chosen album has nothing to show. Go back to all albums rather than stopping on an
+		// error page, where the arrow keys no longer work.
+		if (!error && !assetBacklog.length && shownAlbumKey !== ALL_ALBUMS_KEY) {
+			showAlbumLabel(`${albumStops[albumIndex].label}: nothing to show`);
+			albumIndex = 0;
+			shownAlbumKey = ALL_ALBUMS_KEY;
+			saveAlbumStop($clientIdentifierStore, ALL_ALBUMS_KEY);
+			assetSelectionStore.set(baseSelection);
 			await loadAssets();
 		}
 
@@ -414,6 +452,61 @@
 		];
 	}
 
+	function showAlbumLabel(label: string) {
+		albumLabel = label;
+		clearTimeout(albumLabelTimeout);
+		albumLabelTimeout = window.setTimeout(() => (albumLabel = ''), ALBUM_LABEL_MS);
+	}
+
+	async function loadAlbumStops() {
+		try {
+			const albumsRequest = await api.getConfiguredAlbums({
+				clientIdentifier: $clientIdentifierStore
+			});
+			if (albumsRequest.status != 200) {
+				return;
+			}
+			albumStops = buildAlbumStops(baseSelection, albumsRequest.data);
+		} catch (err) {
+			console.warn('Album switching is unavailable:', err);
+			return;
+		}
+
+		const saved = loadSavedAlbumStop($clientIdentifierStore);
+		const savedIndex = albumStops.findIndex((stop) => stop.key === saved);
+		if (savedIndex > 0) {
+			albumIndex = savedIndex;
+			shownAlbumKey = albumStops[savedIndex].key;
+			assetSelectionStore.set(albumStops[savedIndex].selection);
+			showAlbumLabel(albumStops[savedIndex].label);
+		}
+	}
+
+	function switchAlbum(step: number) {
+		if (albumStops.length < 2) {
+			return;
+		}
+
+		albumIndex = stepAlbumIndex(albumIndex, step, albumStops.length);
+		const stop = albumStops[albumIndex];
+		showAlbumLabel(stop.label);
+		saveAlbumStop($clientIdentifierStore, stop.key);
+
+		// Wait for the remote to settle, so stepping past several albums loads only the last one.
+		clearTimeout(albumSwitchTimeout);
+		albumSwitchTimeout = window.setTimeout(async () => {
+			if (stop.key === shownAlbumKey) {
+				return;
+			}
+			shownAlbumKey = stop.key;
+			assetSelectionStore.set(stop.selection);
+			assetBacklog = [];
+			await updateAssetPromises();
+			infoVisible = false;
+			await handleDone(false, true);
+		}, ALBUM_SWITCH_DELAY_MS);
+	}
+
 	function getObjectUrl(image: Blob) {
 		return URL.createObjectURL(image);
 	}
@@ -456,7 +549,7 @@
 			}
 		});
 
-		getNextAssets();
+		loadAlbumStops().finally(() => getNextAssets());
 
 		return () => {
 			window.removeEventListener('mousemove', showCursor);
@@ -465,6 +558,8 @@
 			window.clearTimeout(timeoutId);
 			window.clearTimeout(videoStallTimeout);
 			window.clearTimeout(watchdogTimer);
+			window.clearTimeout(albumLabelTimeout);
+			window.clearTimeout(albumSwitchTimeout);
 		};
 	});
 
@@ -591,10 +686,16 @@
 					await progressBar.pause();
 				}
 			}}
+			previousAlbum={() => switchAlbum(-1)}
+			nextAlbum={() => switchAlbum(1)}
 			bind:status={progressBarStatus}
 			bind:infoVisible
 			overlayVisible={cursorVisible}
 		/>
+
+		{#if albumLabel}
+			<AlbumLabel label={albumLabel} />
+		{/if}
 
 		<ProgressBar
 			autoplay

@@ -71,4 +71,22 @@ public class MultiImmichFrameLogicDelegateTests
         _strategy.Verify(s => s.GetAssets(), Times.Never);
         _strategy.Verify(s => s.GetAssets(It.IsAny<IAccountImmichFrameLogic>(), It.IsAny<AssetSelection>()), Times.Never);
     }
+
+    [Test]
+    public async Task GetConfiguredAlbums_ListsEveryAccountInConfiguredOrder()
+    {
+        var logic = CreateDelegate("family", "holidays");
+        var familyAlbum = new ConfiguredAlbum(Guid.NewGuid(), "Garden", "family");
+        var holidayAlbums = new[]
+        {
+            new ConfiguredAlbum(Guid.NewGuid(), "Italy", "holidays"),
+            new ConfiguredAlbum(Guid.NewGuid(), "Spain", "holidays")
+        };
+        LogicNamed("family").Setup(l => l.GetConfiguredAlbums()).ReturnsAsync(new[] { familyAlbum });
+        LogicNamed("holidays").Setup(l => l.GetConfiguredAlbums()).ReturnsAsync(holidayAlbums);
+
+        var result = await logic.GetConfiguredAlbums();
+
+        Assert.That(result, Is.EqualTo(new[] { familyAlbum }.Concat(holidayAlbums)));
+    }
 }

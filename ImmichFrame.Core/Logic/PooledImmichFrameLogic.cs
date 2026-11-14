@@ -4,6 +4,8 @@ using ImmichFrame.Core.Helpers;
 using ImmichFrame.Core.Interfaces;
 using ImmichFrame.Core.Logic.Pool;
 using ImmichFrame.Core.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ImmichFrame.Core.Logic;
 
@@ -14,9 +16,11 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic, IDisposable
     private readonly IAssetPool _pool;
     private readonly MemoryAssetsPool? _memoryPool;
     private readonly ImmichApi _immichApi;
+    private readonly ConfiguredAlbumsResolver _configuredAlbums;
     private readonly string _downloadLocation = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ImageCache");
 
-    public PooledImmichFrameLogic(IAccountSettings accountSettings, IGeneralSettings generalSettings, IHttpClientFactory httpClientFactory)
+    public PooledImmichFrameLogic(IAccountSettings accountSettings, IGeneralSettings generalSettings, IHttpClientFactory httpClientFactory,
+        ILogger<PooledImmichFrameLogic>? logger = null)
     {
         _generalSettings = generalSettings;
 
@@ -33,6 +37,8 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic, IDisposable
         // Built once and shared, so per-request album overrides do not reload the daily memories.
         _memoryPool = showMemories ? new MemoryAssetsPool(_immichApi, accountSettings) : null;
         _pool = BuildPool(accountSettings);
+        _configuredAlbums = new ConfiguredAlbumsResolver(_apiCache, _immichApi, accountSettings,
+            logger ?? (ILogger)NullLogger.Instance);
     }
 
     private static TimeSpan RefreshInterval(int hours)
@@ -89,6 +95,8 @@ public class PooledImmichFrameLogic : IAccountImmichFrameLogic, IDisposable
     public async Task<IEnumerable<AssetFaceResponseDto>> GetAssetFacesById(Guid assetId) => await _immichApi.GetFacesAsync(assetId);
 
     public async Task<IEnumerable<AlbumResponseDto>> GetAlbumInfoById(Guid assetId) => await _immichApi.GetAllAlbumsAsync(assetId, null, null, null, null);
+
+    public async Task<IEnumerable<ConfiguredAlbum>> GetConfiguredAlbums() => await _configuredAlbums.GetAlbums();
 
     public async Task<long> GetTotalAssets() => await _pool.GetAssetCount();
 

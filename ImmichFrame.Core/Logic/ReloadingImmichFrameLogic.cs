@@ -83,6 +83,8 @@ public class ReloadingImmichFrameLogic : IImmichFrameLogic, IDisposable
 
     public Task<IEnumerable<AlbumResponseDto>> GetAlbumInfoById(Guid assetId) => _inner.GetAlbumInfoById(assetId);
 
+    public Task<IEnumerable<ConfiguredAlbum>> GetConfiguredAlbums() => _inner.GetConfiguredAlbums();
+
     public Task<AssetResponse> GetAsset(Guid assetId, AssetTypeEnum? assetType = null, string? rangeHeader = null)
         => _inner.GetAsset(assetId, assetType, rangeHeader);
 

@@ -96,6 +96,11 @@ export type AccountTestResultDto = {
     message?: string | null;
     version?: string | null;
 };
+export type ConfiguredAlbum = {
+    id?: string;
+    albumName?: string | null;
+    accountName?: string | null;
+};
 export type ExifResponseDto = {
     city?: string | null;
     country?: string | null;
@@ -393,6 +398,18 @@ export function testAccount(serverAccountSettings?: ServerAccountSettings, opts?
         method: "POST",
         body: serverAccountSettings
     }));
+}
+export function getConfiguredAlbums({ clientIdentifier }: {
+    clientIdentifier?: string;
+} = {}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.fetchJson<{
+        status: 200;
+        data: ConfiguredAlbum[];
+    }>(`/api/Album${QS.query(QS.explode({
+        clientIdentifier
+    }))}`, {
+        ...opts
+    });
 }
 export function getAssets({ clientIdentifier, accountName, albumIds }: {
     clientIdentifier?: string;

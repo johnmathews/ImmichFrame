@@ -17,6 +17,8 @@
 		back: () => void;
 		pause: () => void;
 		showInfo: () => void;
+		previousAlbum?: () => void;
+		nextAlbum?: () => void;
 	}
 
 	let {
@@ -26,7 +28,9 @@
 		next,
 		back,
 		pause,
-		showInfo
+		showInfo,
+		previousAlbum,
+		nextAlbum
 	}: Props = $props();
 
 	function shortcuts(node: any, shortcutList: any[]) {
@@ -64,6 +68,14 @@
 		{
 			key: 'i',
 			action: showInfo
+		},
+		{
+			key: 'ArrowUp',
+			action: previousAlbum
+		},
+		{
+			key: 'ArrowDown',
+			action: nextAlbum
 		}
 	]);
 </script>

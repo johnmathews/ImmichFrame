@@ -10,6 +10,7 @@ namespace ImmichFrame.Core.Logic;
 public class MultiImmichFrameLogicDelegate : IImmichFrameLogic, IDisposable
 {
     private readonly FrozenDictionary<IAccountSettings, IAccountImmichFrameLogic> _accountToDelegate;
+    private readonly IReadOnlyList<IAccountImmichFrameLogic> _accountsInOrder;
     private readonly IServerSettings _serverSettings;
     private readonly IAccountSelectionStrategy _accountSelectionStrategy;
     private readonly ILogger<MultiImmichFrameLogicDelegate> _logger;
@@ -20,10 +21,13 @@ public class MultiImmichFrameLogicDelegate : IImmichFrameLogic, IDisposable
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _serverSettings = serverSettings;
-        _accountToDelegate = serverSettings.Accounts.ToFrozenDictionary(
+        var accounts = serverSettings.Accounts.ToList();
+        _accountToDelegate = accounts.ToFrozenDictionary(
             keySelector: a => a,
             elementSelector: logicFactory
         );
+        // A frozen dictionary does not keep insertion order; the album list follows the configuration.
+        _accountsInOrder = accounts.Select(a => _accountToDelegate[a]).ToList();
         _accountSelectionStrategy = strategyFactory(_accountToDelegate.Values.ToList());
     }
 
@@ -48,6 +52,18 @@ public class MultiImmichFrameLogicDelegate : IImmichFrameLogic, IDisposable
         return (await _accountSelectionStrategy.GetAssets(account, selection)).Shuffle().Select(it => it.ToAsset());
     }
 
+
+    /// <summary>The configured albums of every named account, in the order the accounts are configured.</summary>
+    public async Task<IEnumerable<ConfiguredAlbum>> GetConfiguredAlbums()
+    {
+        var albums = new List<ConfiguredAlbum>();
+        foreach (var logic in _accountsInOrder)
+        {
+            albums.AddRange(await logic.GetConfiguredAlbums());
+        }
+
+        return albums;
+    }
 
     public Task<AssetResponseDto> GetAssetInfoById(Guid assetId)
         => _accountSelectionStrategy.ForAsset(assetId, async logic => (await logic.GetAssetInfoById(assetId)).WithAccount(logic));
