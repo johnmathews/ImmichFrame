@@ -44,12 +44,26 @@
 
 		window.addEventListener('keydown', handleKeyDown);
 
+		// A TV browser that opens the page from the system launcher (LG webOS) leaves it without
+		// keyboard focus, so the remote's arrow keys reach nothing until the page is clicked. Ask
+		// for focus now and a few more times while the page loads; a focused page is left alone.
+		const focusTimers = FOCUS_RETRY_MS.map((delay) =>
+			window.setTimeout(() => {
+				if (!document.hasFocus()) {
+					window.focus();
+				}
+			}, delay)
+		);
+
 		return {
 			destroy() {
 				window.removeEventListener('keydown', handleKeyDown);
+				focusTimers.forEach((timer) => window.clearTimeout(timer));
 			}
 		};
 	}
+
+	const FOCUS_RETRY_MS = [0, 1000, 3000, 10000];
 
 	// Define your shortcut list
 	const shortcutList = $derived([
