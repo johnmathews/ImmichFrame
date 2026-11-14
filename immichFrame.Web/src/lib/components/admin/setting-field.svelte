@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { AnyFieldDef } from './admin-fields';
+	import AlbumListField from './album-list-field.svelte';
 	import {
 		Checkbox,
 		Field,
@@ -54,42 +55,46 @@
 	}
 </script>
 
-<Field label={field.label} invalid={invalidGuids.length > 0}>
-	{#if field.type === 'checkbox'}
-		<Checkbox
-			checked={target[field.key] === true}
-			onCheckedChange={(checked) => (target[field.key] = checked)}
-		/>
-	{:else if field.type === 'select'}
-		<Select options={field.options ?? []} bind:value={target[field.key] as string} />
-	{:else if field.type === 'number'}
-		<NumberInput
-			bind:value={target[field.key] as number}
-			step={field.step ?? '1'}
-			min={field.min}
-			max={field.max}
-		/>
-	{:else if field.type === 'password'}
-		<PasswordInput
-			autocomplete="off"
-			value={textValue}
-			oninput={(e) => (target[field.key] = e.currentTarget.value)}
-		/>
-	{:else if field.type === 'date'}
-		<Input type="date" value={dateValue} oninput={(e) => updateDate(e.currentTarget.value)} />
-	{:else if field.type === 'list' || field.type === 'guid-list'}
-		<Textarea rows={3} value={listText} oninput={(e) => updateList(e.currentTarget.value)} />
-	{:else}
-		<Input
-			placeholder={field.placeholder ?? ''}
-			value={textValue}
-			oninput={(e) => (target[field.key] = e.currentTarget.value)}
-		/>
-	{/if}
+{#if field.type === 'album-list'}
+	<AlbumListField {field} {target} />
+{:else}
+	<Field label={field.label} invalid={invalidGuids.length > 0}>
+		{#if field.type === 'checkbox'}
+			<Checkbox
+				checked={target[field.key] === true}
+				onCheckedChange={(checked) => (target[field.key] = checked)}
+			/>
+		{:else if field.type === 'select'}
+			<Select options={field.options ?? []} bind:value={target[field.key] as string} />
+		{:else if field.type === 'number'}
+			<NumberInput
+				bind:value={target[field.key] as number}
+				step={field.step ?? '1'}
+				min={field.min}
+				max={field.max}
+			/>
+		{:else if field.type === 'password'}
+			<PasswordInput
+				autocomplete="off"
+				value={textValue}
+				oninput={(e) => (target[field.key] = e.currentTarget.value)}
+			/>
+		{:else if field.type === 'date'}
+			<Input type="date" value={dateValue} oninput={(e) => updateDate(e.currentTarget.value)} />
+		{:else if field.type === 'list' || field.type === 'guid-list'}
+			<Textarea rows={3} value={listText} oninput={(e) => updateList(e.currentTarget.value)} />
+		{:else}
+			<Input
+				placeholder={field.placeholder ?? ''}
+				value={textValue}
+				oninput={(e) => (target[field.key] = e.currentTarget.value)}
+			/>
+		{/if}
 
-	{#if invalidGuids.length}
-		<HelperText color="danger">Not a valid ID: {invalidGuids.join(', ')}</HelperText>
-	{:else if field.help}
-		<HelperText>{field.help}</HelperText>
-	{/if}
-</Field>
+		{#if invalidGuids.length}
+			<HelperText color="danger">Not a valid ID: {invalidGuids.join(', ')}</HelperText>
+		{:else if field.help}
+			<HelperText>{field.help}</HelperText>
+		{/if}
+	</Field>
+{/if}

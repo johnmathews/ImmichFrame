@@ -95,6 +95,11 @@ export type AccountTestResultDto = {
     message?: string | null;
     version?: string | null;
 };
+export type AccountAlbumDto = {
+    id?: string;
+    albumName?: string | null;
+    assetCount?: number;
+};
 export type ExifResponseDto = {
     city?: string | null;
     country?: string | null;
@@ -388,6 +393,22 @@ export function testAccount(serverAccountSettings?: ServerAccountSettings, opts?
         status: 401;
         data: string;
     }>("/api/Admin/Settings/TestAccount", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: serverAccountSettings
+    }));
+}
+export function getAccountAlbums(serverAccountSettings?: ServerAccountSettings, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.fetchJson<{
+        status: 200;
+        data: AccountAlbumDto[];
+    } | {
+        status: 400;
+        data: ProblemDetails;
+    } | {
+        status: 401;
+        data: string;
+    }>("/api/Admin/Settings/Albums", oazapfts.json({
         ...opts,
         method: "POST",
         body: serverAccountSettings

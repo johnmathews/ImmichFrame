@@ -1,4 +1,6 @@
+using ImmichFrame.Core.Api;
 using ImmichFrame.Core.Exceptions;
+using ImmichFrame.Core.Helpers;
 using ImmichFrame.WebApi.Helpers;
 using ImmichFrame.WebApi.Models;
 using ImmichFrame.WebApi.Services;
@@ -28,6 +30,13 @@ namespace ImmichFrame.WebApi.Controllers
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
         public string? Version { get; set; }
+    }
+
+    public class AccountAlbumDto
+    {
+        public Guid Id { get; set; }
+        public string AlbumName { get; set; } = string.Empty;
+        public long AssetCount { get; set; }
     }
 
     [ApiController]
@@ -149,6 +158,38 @@ namespace ImmichFrame.WebApi.Controllers
 
             var check = await ImmichServerVersionChecker.CheckAccount(account, _httpClientFactory);
             return new AccountTestResultDto { Success = check.Success, Message = check.Message, Version = check.Version };
+        }
+
+        /// <summary>
+        /// The albums the given account's API key can see, sorted by name, so the admin UI can
+        /// offer them by name. Takes the account as edited, like TestAccount, so it also works
+        /// before the account is saved.
+        /// </summary>
+        [HttpPost("Settings/Albums", Name = "GetAccountAlbums")]
+        [ProducesResponseType(typeof(List<AccountAlbumDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<List<AccountAlbumDto>>> GetAccountAlbums([FromBody] ServerAccountSettings account)
+        {
+            try
+            {
+                account.ValidateAndInitialize(); // resolves ApiKeyFile if given
+
+                var httpClient = _httpClientFactory.CreateClient(ImmichApiHttpClientExtensions.ImmichApiAccountClient);
+                httpClient.UseApiKey(account.ApiKey);
+                var immichApi = new ImmichApi(account.ImmichServerUrl, httpClient);
+
+                var albums = await immichApi.GetAllAlbumsAsync(null, null, null, null, null);
+                return albums
+                    .Select(album => new AccountAlbumDto { Id = album.Id, AlbumName = album.AlbumName, AssetCount = album.AssetCount })
+                    .OrderBy(album => album.AlbumName, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Could not list albums for {url}: {message}", account.ImmichServerUrl, ex.Message);
+                return Problem(detail: $"Could not list albums from {account.ImmichServerUrl}: {ex.Message}",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
         }
     }
 }

@@ -79,3 +79,6 @@ settings via the admin UI.
 - **Weather and calendar** changes take effect within ~15 minutes (internal caches).
 - Every account has a **Test connection** button to verify the server URL and API key
   before saving.
+- **Albums** and **Excluded albums** list albums by name. Type part of a name to add one, and
+  use the arrows to change the order. The names come from the account's server and key, so set
+  those first. **Edit IDs** switches to a plain list of album IDs, one per line.
