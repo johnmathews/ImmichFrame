@@ -19,6 +19,7 @@ request, and the fork shrinks as they land.
 | `feat/album-switching` | Up/down arrow keys switch albums | not yet opened; stacked on #734 |
 | `feat/admin-album-picker` | Choose albums by name in `/admin` | not yet opened |
 | `fix/focus-on-start` | Ask for keyboard focus on start, so a TV remote's keys work without a click | not yet opened |
+| `feat/admin-autosave` | `/admin` saves each change by itself; adds Vitest | not yet opened |
 
 ## Merged upstream
 
