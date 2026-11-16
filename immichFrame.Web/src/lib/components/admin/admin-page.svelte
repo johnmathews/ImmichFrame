@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { get } from 'svelte/store';
-	import { mdiContentSave, mdiLogout, mdiPlus } from '@mdi/js';
+	import { mdiLogout, mdiPlus } from '@mdi/js';
 	import {
 		Alert,
 		AppShell,
@@ -15,6 +15,7 @@
 		Text
 	} from '@immich/ui';
 	import * as adminApi from '$lib/services/admin';
+	import { createAutosave, type AutosaveState } from '$lib/autosave';
 	import { AdminUiState, type ServerSettings } from '$lib/immichFrameApi';
 	import { adminPasswordStore } from '$lib/stores/admin.store';
 	import { generalSections } from './admin-fields';
@@ -31,10 +32,35 @@
 	let settings: ServerSettings = $state({ General: {}, Accounts: [] });
 	let loginError = $state('');
 	let setupError = $state('');
-	let saving = $state(false);
+	let saveState: AutosaveState = $state('idle');
 	let saveError = $state('');
-	let saveSuccess = $state(false);
 	let saveWarnings: string[] = $state([]);
+
+	// Every change saves itself shortly after editing pauses. `savedSnapshot` is what the server
+	// holds, so loading settings, or undoing an edit before it saves, does not trigger a save.
+	let savedSnapshot = '';
+	const autosave = createAutosave({ save, onStateChange: (state) => (saveState = state) });
+
+	$effect(() => {
+		const snapshot = JSON.stringify(settings);
+		if (pageState !== 'editor') {
+			return;
+		}
+		untrack(() => {
+			if (snapshot !== savedSnapshot || autosave.hasUnsavedChanges) {
+				autosave.schedule();
+			}
+		});
+	});
+
+	onDestroy(() => autosave.cancel());
+
+	function warnBeforeLeaving(event: BeforeUnloadEvent) {
+		if (pageState === 'editor' && autosave.hasUnsavedChanges) {
+			void autosave.flush();
+			event.preventDefault();
+		}
+	}
 
 	// Remount account editors after (re)loading settings so their local list texts reset
 	let accountsVersion = $state(0);
@@ -87,7 +113,11 @@
 		try {
 			const res = await adminApi.getSettings();
 			if (res.status == 200) {
+				autosave.cancel();
 				settings = { General: res.data.General ?? {}, Accounts: res.data.Accounts ?? [] };
+				savedSnapshot = JSON.stringify(settings);
+				saveError = '';
+				saveWarnings = [];
 				accountsVersion++;
 				pageState = 'editor';
 				loginError = '';
@@ -106,7 +136,9 @@
 		loadSettings();
 	}
 
-	function logout() {
+	async function logout() {
+		await autosave.flush();
+		autosave.cancel();
 		adminPasswordStore.set(null);
 		loginError = '';
 		pageState = 'login';
@@ -117,23 +149,27 @@
 	}
 
 	function removeAccount(index: number) {
+		// Removing saves at once, so ask first: the account's settings cannot be got back.
+		if (!confirm(`Remove account ${index + 1}? This saves immediately.`)) {
+			return;
+		}
 		settings.Accounts = (settings.Accounts ?? []).filter((_, i) => i != index);
 		accountsVersion++;
 	}
 
-	async function save() {
-		saving = true;
-		saveError = '';
-		saveSuccess = false;
-		saveWarnings = [];
+	async function save(): Promise<boolean> {
+		const body = $state.snapshot(settings) as ServerSettings;
 		try {
-			const res = await adminApi.updateSettings($state.snapshot(settings) as ServerSettings);
+			const res = await adminApi.updateSettings(body);
 			if (res.status == 200) {
-				saveSuccess = true;
+				savedSnapshot = JSON.stringify(body);
+				saveError = '';
 				saveWarnings = res.data.warnings ?? [];
+				return true;
 			} else if (res.status == 401) {
+				autosave.cancel();
 				adminPasswordStore.set(null);
-				loginError = 'Session expired. Sign in again.';
+				loginError = 'Session expired. Sign in again. Your last change was not saved.';
 				pageState = 'login';
 			} else {
 				const data = res.data as { detail?: string } | string | null;
@@ -144,11 +180,12 @@
 			}
 		} catch {
 			saveError = 'Saving failed. Is the server reachable?';
-		} finally {
-			saving = false;
 		}
+		return false;
 	}
 </script>
+
+<svelte:window onbeforeunload={warnBeforeLeaving} />
 
 <AppShell class="bg-light px-4">
 	{#if pageState === 'editor'}
@@ -158,9 +195,20 @@
 					<AdminBrand subtitle="Server settings" />
 
 					<div class="flex items-center gap-2">
-						<Button leadingIcon={mdiContentSave} loading={saving} onclick={save}>
-							{saving ? 'Saving…' : 'Save'}
-						</Button>
+						<div role="status" aria-live="polite" class="flex items-center gap-2">
+							{#if saveState === 'pending' || saveState === 'saving'}
+								<Text color="muted" size="small">Saving…</Text>
+							{:else if saveState === 'saved'}
+								<Text color="success" size="small">Saved</Text>
+							{:else if saveState === 'error'}
+								<Text color="danger" size="small">Not saved</Text>
+								<Button size="small" variant="outline" onclick={() => autosave.retry()}>
+									Retry
+								</Button>
+							{:else}
+								<Text color="muted" size="small">Changes save automatically</Text>
+							{/if}
+						</div>
 						<IconButton
 							icon={mdiLogout}
 							variant="outline"
@@ -198,17 +246,17 @@
 			<AdminLogin error={loginError} onlogin={login} />
 		{:else}
 			<div class="mx-auto max-w-3xl">
-				{#if saveSuccess}
-					<Alert color="success" title="Saved" class="mb-4">
-						Changes are applied live. Slideshow devices pick up display changes on their next
-						reload; weather and calendars refresh within ~15 minutes.
-						{#if saveWarnings.length}
-							<ul class="mt-2 list-disc pl-5">
-								{#each saveWarnings as warning (warning)}
-									<li>{warning}</li>
-								{/each}
-							</ul>
-						{/if}
+				<Text color="muted" size="small" class="mb-4 block">
+					Changes save automatically and apply live. Slideshow devices pick up display changes on
+					their next reload; weather and calendars refresh within ~15 minutes.
+				</Text>
+				{#if saveWarnings.length}
+					<Alert color="warning" title="Saved, with warnings" class="mb-4">
+						<ul class="list-disc pl-5">
+							{#each saveWarnings as warning (warning)}
+								<li>{warning}</li>
+							{/each}
+						</ul>
 					</Alert>
 				{/if}
 				{#if saveError}
